@@ -1,0 +1,111 @@
+#!/usr/bin/perl
+
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+# more details.
+
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
+
+use Modern::Perl '2018';
+use Getopt::Long;
+
+my $arg = get_args();
+my ( $pg_scrub_times, $max ) =
+    get_pg_stats( get_field_offset( $$arg{DEEP} ) );
+
+foreach my $k ( sort keys %$pg_scrub_times ) {
+    my $x = "=" x ( $$pg_scrub_times{$k} / get_terminal_weight($max) );
+    $x = "=" if ( !$x );
+    print "$k  $x  ($$pg_scrub_times{$k})\n";
+}
+
+##############################################################################
+sub get_terminal_weight {
+    my ($max) = @_;
+
+    my $width = `tput cols`;
+
+    return ( $max / ( $width - 24 ) );
+}
+
+##############################################################################
+sub get_pg_stats {
+
+    my ($field) = @_;
+    my $buckets;
+    my $max = 0;
+
+    my @ceph_pg_ls = sort `ceph pg ls`;
+    foreach (@ceph_pg_ls) {
+        next if ( $_ !~ /^[0-9]/ );
+        my @fields = split /\s+/, $_;
+        my $scrub = sprintf "%.10s", $fields[ $field - 1 ];
+        $$buckets{$scrub} += 1;
+        $max = $$buckets{$scrub} if ( $$buckets{$scrub} > $max );
+    }
+
+    return ( $buckets, $max );
+
+}
+
+##############################################################################
+sub get_field_offset {
+
+    my ($DEEP) = @_;
+
+    # NAUTILUS SCRUB_STAMP = 16
+    # NAUTILUS DEEP_SCRUB_STAMP = 18
+    #
+    # QUINCY SCRUB_STAMP = 16
+    # QUINCY DEEP_SCRUB_STAMP = 17
+    #
+    # REEF SCRUB_STAMP = 17
+    # REEF DEEP_SCRUB_STAMP = 18
+
+    my $ceph_version = `ceph --version`;
+    if ( $ceph_version =~ /nautilus/ ) {
+        $DEEP ? return 18 : return 16;
+    }
+    elsif ( $ceph_version =~ /quincy/ ) {
+        $DEEP ? return 17 : return 16;
+    }
+    elsif ( $ceph_version =~ /reef/ ) {
+        $DEEP ? return 18 : return 17;
+    }
+    else {
+        die "Check offsets for SCRUB_STAMP and DEEP_SCRUB_STAMP";
+    }
+
+}
+
+##############################################################################
+sub get_args {
+
+    my %a;
+
+    GetOptions(
+        "verbose" => \$a{VERBOSE},
+        "help"    => \$a{HELP},
+        "deep"    => \$a{DEEP},
+    );
+    usage() if ( $a{HELP} );
+
+    return \%a;
+}
+
+##############################################################################
+sub usage {
+
+    say "Usage: $0 [--deep]";
+    exit;
+
+}
+
+##############################################################################

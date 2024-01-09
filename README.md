@@ -3,7 +3,7 @@ Display Ceph scrub status.
 
 To view scrub progress:
 ```
-% ./scrubs
+# ./scrubs
 2023-11-29  =  (1)
 2023-12-04  =  (1)
 2023-12-19  =  (1)
